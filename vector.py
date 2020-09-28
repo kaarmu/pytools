@@ -1,5 +1,12 @@
 #! /usr/bin/env python3
 
+def add(l1, l2):
+    return [a+b for a,b in zip(l1, l2)]
+def sub(l1, l2):
+    return [a-b for a,b in zip(l1, l2)]
+
+
+
 class CartVec(object):
 
     def __init__(self, x=0, y=0, z=0):

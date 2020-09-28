@@ -3,7 +3,8 @@
 from functools import reduce
 import operator as op
 
-from collections.abc import Container
+from numbers import Integral
+from collections.abc import MutableSequence
 
 def ispower2(x):
     if x == 0:
@@ -14,6 +15,19 @@ def ispower2(x):
         return -1
     else:
         return ispower2(x // 2) + 1 or -1
+
+def ceilpow2(x):
+    i = 1
+    while 2**i < x:
+        i += 1
+    return i
+
+def floorpow2(x):
+    return ceilpow2(x) - 1
+
+def unsignify(x, nbits=8):
+    g_mask = 2**nbits - 1
+    return (~x + 1)
 
 
 class Converter:
@@ -35,120 +49,210 @@ class Converter:
 
         parity_bits = reduce(op.xor, BinT(nof_data).getWhereHigh(data))
 
-class blis(Container):
-    """A binary list. Represents a set of bits in list format with bools."""
-    def __init__(self, *args):
+class blis(Integral, MutableSequence):
+    def __init__(self, arg1=None, arg2=None):
+        """
+        Create a binary list of either an integer or iterable bools.
+
+        [True, True, False, True]
+        1 1 0 1
+        0b1101
+        13        
+
+        Arguments:
+            - blis(value)
+            - blis(value, nbits)
+            - blis(iterable)
+            - blis(iterable, nbits)
+            Types:
+                value - int
+                iterable - [tuple, list]
+                nbits - int
+        """
+
+        self.bits = []
+
+        if (arg1 and arg2) is None:
+            return
+
+        typ = type(arg1)
+        if typ is int:
+            self.__from_value(arg1, arg2)
+
+        elif typ in (list, tuple):
+            self.__from_sequence(arg1, arg2)
         
-        self.value = []
+        elif typ is type(self):
+            self.bits = [elm for elm in arg1.bits]
+            if arg2 is not None:
+                self.bits = self.bits[:arg2] # if smaller nbits
+                while len(self.bits) < arg2: # if larger nbits
+                    self.bits.append(False)
         
-        if len(args) == 1:
-            ls, = args
-            
-            if type(ls) in (list, tuple):
-                for x in ls:
-                    if type(x) is not bool:
-                        raise TypeError(f"Elements must be bool, not {type(x)}.")
-                    self.value.append(x)
-            else:
-                raise TypeError(f"Cannot create blis out of {type(ls)}.")
-
-        elif len(args) == 2:
-            nbit, x = args
-
-            if type(x) is int:
-                self.value = list(BinT(nbit).partition(x))
-            else:
-                raise TypeError(f"Cannot create blis out of {type(x)}.")
-
         else:
-            raise TypeError('Expected either one argument with list or tuple of bools, '
-                            'or two arguments ')
+            raise TypeError(f'Expected first argument to be either '
+                            f'int, list, tuple or blis, not {typ}.')
 
-    def push(self, x):
-        if type(x) is not bool:
-            raise TypeError(f"Elements must be bool, not {type(x)}.")
+    def __from_value(self, val, nbits=None):
+        nbits = nbits or 8
+        self.bits = list(BinT(nbits).represent(val))
 
-        return self.value.append(x)
-      
-    def pop(self):
-        return self.value.pop()
+    def __from_sequence(self, seq, nbits=None):
+        nbits = nbits or max(len(seq), 8)
+        self.bits = []
+        for elm in seq:
+            assert type(elm) is bool, (f'Expected elements of type '
+                                       f'bool, not {type(elm)}')
+            self.bits.append(elm)
+        self.bits = self.bits[:nbits]
 
-    def insert(self, i, x):
-        if type(x) is not bool:
-            raise TypeError(f"Elements must be bool, not {type(x)}.")
+    def nbits(self):
+        return len(self.bits)
 
-        return self.value.insert(i, x)
-    
-    def extend(self, x):
-        if type(ls) in (list, tuple):
-            for x in ls:
-                if type(x) is not bool:
-                    raise TypeError(f"Elements must be bool, not {type(x)}.")
-                self.value.append(x)
-        else:
-            raise TypeError(f"Cannot extend blis out of {type(ls)}.")
-
-    def reverse(self):
-        return 
-
-    def __len__(self):
-        return len(self.value)
-
-    def __iter__(self):
-        return iter(self.value)
+    def __repr__(self):
+        return ''.join(1 if val else 0 for val in reversed(self.bits))
 
     def __str__(self):
-        return ''.join(f'{bit}' if i%4 else f' {bit}' for i, bit in enumerate(self.value))
+        return repr(self)
+
+    def __abs__(self):
+        return -self if self.bits[-1] else +self
     
-    # __hash__: None  # type: ignore
-    
-    def __getitem__(self, i):
-        if type(i) not in (int, slice):
-            raise Exception(f'Index must be either int or slice, not {type(i)}.')
+    def __add__(self, other):
+        if type(other) is not type(self):
+            other = blis(other)
+        nbits = max(self.nbits(), other.nbits())
+        val = int(self) + int(other)
+        return blis(val, nbits)
+
+    def __and__(self, other):
+        if type(other) is not type(self):
+            other = blis(other)
+        nbits = max(self.nbits(), other.nbits())
+        val = BinT(nbits).andAt(int(self), int(other))
+        return blis(val, nbits)
+        # if other.nbits() > self.nbits():
+        #     return NotImplemented # Make sure that self.nbits is greatest
+        # nbits = self.nbits()
+        # val = [elm for elm in self.bits]
+        # val = [a and b for a, b in zip(val, other.bits)]
+        # return blis(val, nbits)
         
-        return self.value[i]
 
-    def __setitem__(self, i, x):
-        if type(i) not in (int, slice):
-            raise Exception(f'Index must be either int or slice, not {type(i)}.')
-        
-        if type(x) is not bool:
-            raise Exception(f'Elements must be bool, not {type(x)}.')
-        
-        return self.value[i] = x
+    def __ceil__(self):
+        pass
 
-    def __delitem__(self, i):
-        if type(i) not in (int, slice):
-            raise Exception(f'Index must be either int or slice, not {type(i)}.')
+    def __delitem__(self, arg):
+        pass
 
-        del self.value[i]
+    def __eq__(self, other):
+        pass
 
-    def __add__(self, x):
-        # Concat 
-        if type(x) is bool:
-            self.push(x)
-        elif type(x) in (list, tuple):
-            self.extend(x)
-        else:
-            return NotImplemented
+    def __floor__(self):
+        pass
 
+    def __floordiv__(self, other):
+        pass
 
+    def __getitem__(self, arg):
+        pass
 
-    # SAME AS OR
-    # def __add__(self, x: List[_T]) -> List[_T]: ...
-    # USELESS; x+x=x
-    # def __iadd__(self: _S, x: Iterable[_T]) -> _S: ...
-    # SAME AS AND
-    # def __mul__(self, n: int) -> List[_T]: ...
-    # def __rmul__(self, n: int) -> List[_T]: ...
-    # CONTAIN A SEQUENCE
-    # def __contains__(self, o: object) -> bool: ...
-    # REVERSE
-    # def __reversed__(self) -> Iterator[_T]: ...
-    # def __gt__(self, x: List[_T]) -> bool: ...
-    # def __ge__(self, x: List[_T]) -> bool: ...
-    # def __lt__(self, x: List[_T]) -> bool: ...
-    # def __le__(self, x: List[_T]) -> bool: ...
+    def __int__(self):
+        value = 0
+        for i, bit in enumerate(self.bits):
+            if bit:
+                value += 1 << i
+        if self.bits[-1]:
+            value -= 2**len(self.bits)
+        return value
+
+    def __invert__(self):
+        pass
+
+    def __le__(self, other):
+        pass
+
+    def __len__(self):
+        pass
+
+    def __lshift__(self, arg):
+        pass
+
+    def __lt__(self, other):
+        pass
+
+    def __mod__(self, arg):
+        pass
+
+    def __mul__(self, other):
+        pass
+
+    def __neg__(self):
+        pass
+
+    def __or__(self, other):
+        pass
+
+    def __pos__(self):
+        pass
+
+    def __pow__(self, arg):
+        pass
+
+    def __radd__(self, other):
+        pass
+
+    def __rand__(self, other):
+        pass
+
+    def __rfloordiv__(self, other):
+        pass
+
+    def __rlshift__(self, arg):
+        pass
+
+    def __rmod__(self, arg):
+        pass
+
+    def __rmul__(self, other):
+        pass
+
+    def __ror__(self, other):
+        pass
+
+    def __round__(self, arg):
+        pass
+
+    def __rpow__(self, arg):
+        pass
+
+    def __rrshift__(self, arg):
+        pass
+
+    def __rshift__(self, arg):
+        pass
+
+    def __rtruediv__(self, other):
+        pass
+
+    def __rxor__(self, other):
+        pass
+
+    def __setitem__(self, arg1, arg2):
+        pass
+
+    def __truediv__(self, other):
+        pass
+
+    def __trunc__(self):
+        pass
+
+    def __xor__(self, other):
+        pass
+
+    def insert(self):
+        pass
+
 
 class BinT:
     """A collection of binary tools for unsigned ints."""
@@ -308,7 +412,7 @@ class BinT:
         n_mask = mask ^ self.g_mask
         return (a & n_mask) | (b & mask)
 
-    def partition(self, a):
+    def represent(self, a):
         """return a tuple of bools representative of value."""
         return tuple(bool(a & 1 << i) for i in range(self.nbit))
 
@@ -328,6 +432,6 @@ class BinT:
         """Returns true if all indices in il are low."""
         return not any(a & 1 << i for i in il)
 
-    def iseven(self, a):
+    def haseven(self, a):
         """Returns true if there is a even amount of 1s in a."""
         return sum(self.getWhereHigh(a)) % 2 == 0
