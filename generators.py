@@ -1,5 +1,7 @@
 #! /usr/bin/env python3
 
+from random import choice
+
 def warnLast(obj):
     """
     Generate, for iterables, a warning if you are at the last element.
@@ -22,3 +24,7 @@ def warnLast(obj):
         yield (*curr, False) if isinstance(curr, tuple) else (curr, False)
         curr = head
     yield (*curr, True) if isinstance(curr, tuple) else (curr, True)
+
+def birth(N, population=[0,1]):
+    for _ in range(N):
+        yield choice(population)
