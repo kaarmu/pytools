@@ -1,6 +1,69 @@
 #! /usr/bin/env python3
 
 from random import choice
+from time import sleep
+from math import inf
+
+
+def pipe(*gs):
+    """
+    Take multiple (uninitialized) generators and pipe them together.
+
+    First argument is original generator and source. Thus best if
+    initialized by user.
+
+    Example
+    -------
+        piper(f(...), g, h) -> h(g(f(...)))
+
+        Think of this like,
+        f(...) | g | h | ...
+    """
+    gs, last = gs[:-1], gs[-1]
+    yield from last(pipe(*gs)) if gs else last
+
+
+def purepipe(*gs):
+    """
+    Much like pipe but doesn't expect a source in the beginning.
+
+    Returns an uninitialized generator function p(g) where g would
+    be its source generator.
+
+    Example
+    -------
+        p = purepipe(f1, f2)
+        p(g(...)) -> f2(f1(g(...)))
+    """
+    return lambda g: (yield from pipe(g, *gs))
+
+
+def sleepy(generator, T=0.5):
+    """
+    Cause a generator to be sleepy.
+
+    A very simple generator that yields values only after T seconds.
+    """
+    for value in generator:
+        sleep(T)
+        yield value
+
+
+def printer(iterable):
+    """
+    The simplest printer genereator ever.
+    """
+    for elm in iterable:
+        print(elm)
+        yield elm
+
+
+def inflist(start=0, stop=inf, step=1):
+    op = (lambda x, y: x < y) if step > 0 else (lambda x, y: x > y)
+    while op(start, stop):
+        start += step
+        yield start
+
 
 def warnLast(obj):
     """
