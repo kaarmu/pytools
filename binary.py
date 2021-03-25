@@ -1,10 +1,23 @@
 #! /usr/bin/env python3
 
-from functools import reduce
-import operator as op
+"""
+TODO:
+    CRC
+        Read,
+        https://en.wikipedia.org/wiki/Cyclic_redundancy_check
+        for similar project,
+        https://en.wikipedia.org/wiki/Fletcher%27s_checksum
+    Hamming code
+    Revisit BinT
+    Overflow problems of blis?
+    blis from/to bytes
+    blis setitem is suboptimal
+"""
 
 from numbers import Integral
 from collections.abc import MutableSequence
+from observation import isiterable
+
 
 def ispower2(x):
     if x == 0:
@@ -16,48 +29,36 @@ def ispower2(x):
     else:
         return ispower2(x // 2) + 1 or -1
 
-def ceilpow2(x):
-    i = 1
-    while 2**i < x:
-        i += 1
+def ceilpow2(x, i=0):
+    if 2**i < x:
+        return ceilpow2(x, i+1)
     return i
 
-def floorpow2(x):
-    return ceilpow2(x) - 1
+def floorpow2(x, i=0):
+    if 2**i <= x:
+        if r := floorpow2(x, i+1):
+            return r
+        return i
+    return None
 
-def unsignify(x, nbits=8):
-    g_mask = 2**nbits - 1
-    return (~x + 1)
+def makeargblis(func):
+    def wrapper(self, other):
+        if type(other) is not type(self):
+            other = blis(other)
+        return func(self, other)
+    return wrapper
 
-
-class Converter:
-    
-    @staticmethod
-    def EncodeHamming(nbitblock, data):
-        """
-        Encode data in hamming code for error bit recreation.
-
-        If nbit = 16 bits -> create H(15, 11) with the first (from LSB) 11 bits.
-        
-        16 nbits -> 4 parity bits, 16-1-4 = 11 value bits
-        32 nbits -> 6 parity bits, 32-1-6 = 25
-        2^n nbits -> n parity bits, 2^n -1 -n  value bits
-        """
-        
-        assert (nof_parity := ispower2(nbitblock)) != -1, 'Number of parity bits (size of bit-block) must be a power of 2.'
-        nof_data = nbitblock - nof_parity - 1
-
-        parity_bits = reduce(op.xor, BinT(nof_data).getWhereHigh(data))
 
 class blis(Integral, MutableSequence):
-    def __init__(self, arg1=None, arg2=None):
+    def __init__(self, *args):
         """
         Create a binary list of either an integer or iterable bools.
 
-        [True, True, False, True]
-        1 1 0 1
+        blis(13, 4)
+        [True, False, True, True] # index 0 -> LSB
+        [1101]
         0b1101
-        13        
+        13
 
         Arguments:
             - blis(value)
@@ -66,192 +67,438 @@ class blis(Integral, MutableSequence):
             - blis(iterable, nbits)
             Types:
                 value - int
-                iterable - [tuple, list]
+                iterable - [tuple, list, ...]
                 nbits - int
         """
 
         self.bits = []
 
-        if (arg1 and arg2) is None:
+        def from_value(val, nbits=None):
+            neg = val < 0
+            val = abs(val)
+            
+            if val == 0:
+                nbits = nbits or 8
+                self.bits = [0]*nbits
+                return
+
+            il = []
+            while val:
+                il.append(floorpow2(val))
+                val -= 2**il[-1]
+            m = max(il) + 2 # plus 2 because of zero indexing and one more for two's compl.
+            nbits = nbits or max(m, 8)
+            assert nbits > 0, 'nbits must be positive.'
+            self.bits = [0]*nbits
+            for i in il:
+                if i < nbits:
+                    self.bits[i] = 1
+            if neg:
+                self.negate()
+ 
+        def from_sequence(seq, nbits=None):
+            nbits = nbits or len(seq)
+            assert nbits > 0, 'nbits must be positive.'
+            for elm in seq:
+                if type(elm) not in (bool, int):
+                    raise TypeError(f'Expected elements of type bool, not {type(elm)}')
+                if int(elm) not in (1, 0):
+                    raise TypeError(f'Expected element to be one either [True, False, 1, 0], '
+                                    f'not {elm}')
+                self.bits.append(int(elm))
+
+            self.bits = self.bits[:nbits] # if smaller nbits
+            while len(self.bits) < nbits: # if larger nbits
+                self.bits.append(0)
+
+        def from_string(string, nbits=None):
+            s = reversed(string)
+            m = map(lambda x: int(x), s)
+            l = list(m)
+            for i in l:
+                assert i in [0,1], 'int must be either 0 or 1.'
+            from_sequence(l, nbits=nbits)
+
+        if not args:
             return
-
-        typ = type(arg1)
-        if typ is int:
-            self.__from_value(arg1, arg2)
-
-        elif typ in (list, tuple):
-            self.__from_sequence(arg1, arg2)
         
-        elif typ is type(self):
-            self.bits = [elm for elm in arg1.bits]
-            if arg2 is not None:
-                self.bits = self.bits[:arg2] # if smaller nbits
-                while len(self.bits) < arg2: # if larger nbits
-                    self.bits.append(False)
+        elif len(args) > 2:
+            raise TypeError(f'Expected at most 2 arguments, not {len(args)}.')
+
+        elif type(args[0]) is int:
+            from_value(*args)
+
+        elif type(args[0]) is str:
+            from_string(*args)
+
+        elif isiterable(args[0]):
+            from_sequence(*args)
         
         else:
             raise TypeError(f'Expected first argument to be either '
-                            f'int, list, tuple or blis, not {typ}.')
+                            f'int, list, tuple or blis, not {type(args[0])}.')
 
-    def __from_value(self, val, nbits=None):
-        nbits = nbits or 8
-        self.bits = list(BinT(nbits).represent(val))
+    #
+    # PROPERTY
+    #
 
-    def __from_sequence(self, seq, nbits=None):
-        nbits = nbits or max(len(seq), 8)
-        self.bits = []
-        for elm in seq:
-            assert type(elm) is bool, (f'Expected elements of type '
-                                       f'bool, not {type(elm)}')
-            self.bits.append(elm)
-        self.bits = self.bits[:nbits]
-
+    @property
     def nbits(self):
         return len(self.bits)
 
-    def __repr__(self):
-        return ''.join(1 if val else 0 for val in reversed(self.bits))
+    @nbits.setter
+    def nbits(self, n):
+        if n > self.nbits:
+            while len(self.bits) < n:
+                self.bits.append(0)
+        else:
+            self.bits = self.bits[:n]
 
-    def __str__(self):
-        return repr(self)
-
-    def __abs__(self):
-        return -self if self.bits[-1] else +self
+    @property
+    def isneg(self):
+        return bool(self.bits[-1]) if self.bits else True
     
-    def __add__(self, other):
-        if type(other) is not type(self):
-            other = blis(other)
-        nbits = max(self.nbits(), other.nbits())
-        val = int(self) + int(other)
-        return blis(val, nbits)
+    #
+    # MODIFIERS
+    #
 
-    def __and__(self, other):
-        if type(other) is not type(self):
-            other = blis(other)
-        nbits = max(self.nbits(), other.nbits())
-        val = BinT(nbits).andAt(int(self), int(other))
-        return blis(val, nbits)
-        # if other.nbits() > self.nbits():
-        #     return NotImplemented # Make sure that self.nbits is greatest
-        # nbits = self.nbits()
-        # val = [elm for elm in self.bits]
-        # val = [a and b for a, b in zip(val, other.bits)]
-        # return blis(val, nbits)
-        
+    def negate(self):
+        # invert self
+        self.invert()
+        # add one
+        self.increment()
+        return self
 
-    def __ceil__(self):
-        pass
+    def invert(self):
+        for i, b in enumerate(self):
+            self.bits[i] = int(not b)
+        return self
 
-    def __delitem__(self, arg):
-        pass
+    def increment(self):
+        i, carry = 0, 1
+        while carry and i < self.nbits:
+            self.bits[i] = (self.bits[i] + carry) % 2
+            if self.bits[i]:
+                carry = 0
+            i += 1
+        if carry:
+            self.bits.append(True)
+        return self
 
-    def __eq__(self, other):
-        pass
+    #
+    # CONVERSION
+    #
 
-    def __floor__(self):
-        pass
-
-    def __floordiv__(self, other):
-        pass
-
-    def __getitem__(self, arg):
-        pass
+    def __repr__(self):
+        return f"blis('{self!s}', {int(self)})"
 
     def __int__(self):
-        value = 0
-        for i, bit in enumerate(self.bits):
-            if bit:
-                value += 1 << i
-        if self.bits[-1]:
-            value -= 2**len(self.bits)
+        value = sum(2**i for i, b in enumerate(self) if b)
+        if self.isneg:
+            value -= 2**self.nbits
         return value
 
-    def __invert__(self):
-        pass
+    def __iter__(self):
+        return iter(self.bits)
 
-    def __le__(self, other):
-        pass
+    def __str__(self):
+        return ''.join(str(val) for val in reversed(self.bits))
 
-    def __len__(self):
-        pass
+    #
+    # MATH OPERATORS
+    #
 
-    def __lshift__(self, arg):
-        pass
-
-    def __lt__(self, other):
-        pass
-
-    def __mod__(self, arg):
-        pass
-
-    def __mul__(self, other):
-        pass
-
-    def __neg__(self):
-        pass
-
-    def __or__(self, other):
-        pass
+    ## Unary
 
     def __pos__(self):
-        pass
+        # nothing more than copy self
+        return blis(self)
+    
+    def __neg__(self):
+        # copy and negate
+        return blis(self).negate()
 
-    def __pow__(self, arg):
-        pass
+    ## Binary
 
+    @makeargblis
+    def __add__(self, other):
+        nbits = max(self.nbits, other.nbits)
+        val = int(self) + int(other) # easier to add in integers
+        if 2**(nbits - 1) < val:
+            nbits = None
+        return blis(val, nbits)
+    
     def __radd__(self, other):
-        pass
+        return self + other
 
-    def __rand__(self, other):
-        pass
-
-    def __rfloordiv__(self, other):
-        pass
-
-    def __rlshift__(self, arg):
-        pass
-
-    def __rmod__(self, arg):
-        pass
+    @makeargblis
+    def __mul__(self, other):
+        val = int(self) * int(other) # easier in integers
+        return blis(val)
 
     def __rmul__(self, other):
-        pass
-
-    def __ror__(self, other):
-        pass
-
-    def __round__(self, arg):
-        pass
-
-    def __rpow__(self, arg):
-        pass
-
-    def __rrshift__(self, arg):
-        pass
-
-    def __rshift__(self, arg):
-        pass
-
-    def __rtruediv__(self, other):
-        pass
-
-    def __rxor__(self, other):
-        pass
-
-    def __setitem__(self, arg1, arg2):
-        pass
+        return self * other
 
     def __truediv__(self, other):
-        pass
+        return self / other
+
+    def __rtruediv__(self, other):
+        return other / self
+
+    @makeargblis
+    def __floordiv__(self, other):
+        val = int(self) // int(other) # easier in integers
+        return blis(val)
+    
+    @makeargblis
+    def __rfloordiv__(self, other):
+        val = int(other) // int(self)
+        return blis(val)
+
+    ## Special
+
+    @makeargblis
+    def __pow__(self, other):
+        val = int(self) ** int(other) # easier in integers
+        return blis(val)
+
+    def __rpow__(self, arg):
+        return NotImplemented
+
+    @makeargblis
+    def __mod__(self, other):
+        val = int(self) % int(other) # easier in integers
+        return blis(val, other.nbits)
+
+    @makeargblis
+    def __rmod__(self, other):
+        val = int(other) % int(self)
+        return blis(val, self.nbits)
+
+    ## Functions
+
+    def __abs__(self):
+        return (-self) if self.isneg else (+self)
+
+    def __ceil__(self):
+        """
+        Round up to any 2**n
+
+        overflow error exist.
+        if number is of 2**n, then returns 2**(n+1).
+        for negative number, go to -2**(n-1).
+        that is, move towards positive infinity.
+        """
+        if self.isneg:
+            i = self.nbits - 1
+            while self.bits[i] == 1:
+                i -= 1
+            other = blis(0, self.nbits)
+            other.bits[i:] = [1] * (self.nbits - i)
+        else:
+            i = self.nbits - 1
+            while self.bits[i] == 0:
+                i -= 1
+            other = blis(0, self.nbits)
+            other.bits[i+1] = 1
+        
+        return other
+
+    def __floor__(self):
+        """
+        Round down to any 2**n
+        
+        overflow error exist.
+        same as ceil, but move towards negative infinity.
+        """
+        if self.isneg:
+            i = self.nbits - 1
+            while self.bits[i] == 1:
+                i -= 1
+            i += 1
+            other = blis(0, self.nbits)
+            other.bits[i:] = [1] * (self.nbits - i)
+        else:
+            i = self.nbits - 1
+            while self.bits[i] == 0:
+                i -= 1
+            other = blis(0, self.nbits)
+            other.bits[i] = 1
+        
+        return other
 
     def __trunc__(self):
-        pass
+        return self.__ceil__() if self.isneg else self.__floor__()
 
+    def __round__(self, n):
+        """
+        Round to 2**n.
+
+        I.e., remove/set-to-zero the first bits (from LSB).
+
+        >> x = [11111111]
+        >> round(x, 3)
+        [11111000]
+        """
+        val = blis(self)
+        for i in range(n):
+            val.bits[i] = 0
+        return val
+
+    #
+    # BIT OPERATORS
+    #
+
+    ## Unary
+
+    def __invert__(self):
+        # copy and invert
+        return blis(self).invert()
+
+    ## Binary
+
+    @makeargblis
+    def __and__(self, other):
+        nbits = max(self.nbits, other.nbits)
+        val = blis(self, nbits) # copy
+        for i, bit in enumerate(other):
+            val.bits[i] &= bit
+        return val
+    
+    def __rand__(self, other):
+        return self & other
+    
+    @makeargblis
+    def __or__(self, other):
+        nbits = max(self.nbits, other.nbits)
+        val = blis(self, nbits) # copy
+        for i, bit in enumerate(other):
+            val.bits[i] |= bit
+        return val
+
+    def __ror__(self, other):
+        return self | other
+
+    @makeargblis
     def __xor__(self, other):
-        pass
+        nbits = max(self.nbits, other.nbits)
+        val = blis(self, nbits)
+        for i, bit in enumerate(other):
+            val.bits[i] ^= bit
+        return val
+    
+    def __rxor__(self, other):
+        return self ^ other
 
-    def insert(self):
-        pass
+    ## Special
+
+    """
+    PLAN:
+    not me  int     <<      int     move arg1 left by arg2
+    lshift  blis    <<      int     move arg1 left by arg2
+    rlshift int     <<      blis    retreive the first arg1 bits of arg2
+    lshift  blis    <<      blis    insert arg2 to the right of arg1
+
+    not me  int     >>      int     move arg1 to the right by arg2
+    rshift  blis    >>      int     retreive the first arg2 bits of arg1 from the right
+    rrshift int     >>      blis    move arg2 to the right
+    rshift  blis    >>      blis    insert 
+    """
+
+    def __lshift__(self, other):
+        if type(other) is int:
+            retval = blis()
+            retval.bits = [0] * other + self.bits
+            retval.nbits = self.nbits
+        else:
+            # self << other
+            other = blis(other)
+            
+            retval = blis()
+            retval.bits = other.bits + self.bits
+            retval.bits = retval.bits[:self.nbits]
+
+        return retval
+
+    def __rlshift__(self, other):
+        if type(other) is int:
+            if other > self.nbits:
+                raise TypeError('Argument cannot be larger than nbits.')
+            retval = blis(self.bits[-other:])
+        else:
+            # other << self
+            other = blis(other)
+            
+            retval = blis()
+            retval.bits = self.bits + other.bits
+            retval.bits = retval.bits[:other.nbits]
+
+        return retval
+
+    def __rshift__(self, other):
+        if type(other) is int:
+            if other > self.nbits:
+                raise TypeError('Argument cannot be larger than nbits.')
+            retval = blis(self.bits[:other])
+        else:
+            # self >> other
+            other = blis(other)
+
+            retval = blis()
+            retval.bits = other.bits + self.bits
+            retval.bits = retval.bits[-other.nbits:]
+        
+        return retval
+
+    def __rrshift__(self, other):
+        if type(other) is int:
+            retval = blis()
+            retval.bits = self.bits + [0] * other
+            retval.bits = retval.bits[-self.nbits:]
+        else:
+            # other >> self
+            other = blis(other)
+
+            retval = blis()
+            retval.bits = self.bits + other.bits
+            retval.bits = retval.bits[-self.nbits:]
+
+        return retval        
+
+    #
+    # COMPARISON
+    #
+
+    @makeargblis
+    def __eq__(self, other):
+        return int(self) == int(other)
+
+    @makeargblis
+    def __le__(self, other):
+        return int(self) <= int(other)
+
+    @makeargblis
+    def __lt__(self, other):
+        return int(self) < int(other)
+
+    #
+    # MANAGEMENT
+    #
+
+    def __len__(self, *args, **kwargs):
+        return self.bits.__len__(*args, **kwargs)
+
+    def __getitem__(self, i):
+        return blis(self.bits[i])
+
+    def __setitem__(self, *args, **kwargs):
+        self.bits.__setitem__(*args, **kwargs)
+
+    def __delitem__(self, *args, **kwargs):
+        self.bits.__delitem__(*args, **kwargs)
+
+    def insert(self, *args, **kwargs):
+        self.bits.insert(*args, **kwargs)
 
 
 class BinT:
@@ -435,3 +682,38 @@ class BinT:
     def haseven(self, a):
         """Returns true if there is a even amount of 1s in a."""
         return sum(self.getWhereHigh(a)) % 2 == 0
+
+
+class CRC:
+    
+    def __init__(self, poly):
+        self.poly = blis(poly)
+        self.order = self.poly.nbits
+        self.poly.append(1)
+
+    def write(self, x):
+
+        x = blis(x)
+
+        if x.nbits < self.poly.nbits:
+            raise TypeError('x cannot have less number of bits than poly.')
+
+        # padding with order
+        x.bits = [0] * self.order + x.bits
+
+        i = 0
+        while x[self.order + 1:]:
+            if x[-(i+1)] == 0:
+                i += 1
+                continue
+            
+            print(x)
+            print(' '*i + str(self.poly))
+            
+            sl = slice(-(self.poly.nbits + i), -i or None)
+            x[sl] = x[sl] ^ self.poly
+
+        print(x)
+        return x[:self.order]
+
+
