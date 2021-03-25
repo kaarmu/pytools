@@ -114,7 +114,7 @@ def meld(*iterables):
 
         output: 'abcdirs'
     """
-    N = 1 # Max common length
+    N = 0 # Max common length
     for elms in zip(*iterables):
         N += 1
         yield elms[0]
