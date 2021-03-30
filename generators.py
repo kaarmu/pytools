@@ -2,52 +2,47 @@
 
 from random import choice
 from time import sleep
-from math import inf
+from math import cos, inf, pi
+from functools import reduce
 
 
-def pipe(*gs):
-    """
-    Take multiple (uninitialized) generators and pipe them together.
+#
+# Sources
+#
 
-    First argument is original generator and source. Thus best if
-    initialized by user.
+def inflist(start=0, stop=inf, step=1):
+    op = (lambda x, y: x < y) if step > 0 else (lambda x, y: x > y)
+    while op(start, stop):
+        start += step
+        yield start
 
-    Example
-    -------
-        piper(f(...), g, h) -> h(g(f(...)))
+def birth(N, population=[0,1]):
+    """ From a population, generate a sample randomly. """
+    for _ in range(N):
+        yield choice(population)
 
-        Think of this like,
-        f(...) | g | h | ...
-    """
-    gs, last = gs[:-1], gs[-1]
-    yield from last(pipe(*gs)) if gs else last
+def loop(iterable):
+    while True:
+        yield from iterable
 
+#
+# Modifiers
+#
 
-def purepipe(*gs):
-    """
-    Much like pipe but doesn't expect a source in the beginning.
-
-    Returns an uninitialized generator function p(g) where g would
-    be its source generator.
-
-    Example
-    -------
-        p = purepipe(f1, f2)
-        p(g(...)) -> f2(f1(g(...)))
-    """
-    return lambda g: (yield from pipe(g, *gs))
-
-
-def sleepy(generator, T=0.5):
+def sleepy(iterable, T=[0.5]):
     """
     Cause a generator to be sleepy.
 
     A very simple generator that yields values only after T seconds.
     """
-    for value in generator:
-        sleep(T)
-        yield value
+    for elm, t in zip(iterable, loop(T)):
+        sleep(t)
+        yield elm
 
+def periodic(iterable, period=4):
+    for i, elm in enumerate(iterable):
+        x = cos((i % period)*pi/period)
+        yield x, elm
 
 def printer(iterable):
     """
@@ -56,14 +51,6 @@ def printer(iterable):
     for elm in iterable:
         print(elm)
         yield elm
-
-
-def inflist(start=0, stop=inf, step=1):
-    op = (lambda x, y: x < y) if step > 0 else (lambda x, y: x > y)
-    while op(start, stop):
-        start += step
-        yield start
-
 
 def warnLast(obj):
     """
@@ -90,14 +77,42 @@ def warnLast(obj):
         curr = head
     yield (*curr, True) if isinstance(curr, tuple) else (curr, True)
 
+#
+# Channels
+#
 
-def birth(N, population=[0,1]):
-    """ From a population, generate a sample randomly. """
-    for _ in range(N):
-        yield choice(population)
+def pipe(*gs):
+    """
+    Take multiple (uninitialized) generators and pipe them together.
 
+    First argument is original generator and source. Thus best if
+    initialized by user.
 
-def meld(*iterables):
+    Example
+    -------
+        piper(f(...), g, h) -> h(g(f(...)))
+
+        Think of this like,
+        f(...) | g | h | ...
+    """
+    gs, last = gs[:-1], gs[-1]
+    yield from last(pipe(*gs)) if gs else last
+
+def purepipe(*gs):
+    """
+    Much like pipe but doesn't expect a source in the beginning.
+
+    Returns an uninitialized generator function p(g) where g would
+    be its source generator.
+
+    Example
+    -------
+        p = purepipe(f1, f2)
+        p(g(...)) -> f2(f1(g(...)))
+    """
+    return lambda g: (yield from pipe(g, *gs))
+
+def meld(*gs):
     """
     Meld iterables to a single iterable with left-most argument priority.
 
@@ -115,8 +130,17 @@ def meld(*iterables):
         output: 'abcdirs'
     """
     N = 0 # Max common length
-    for elms in zip(*iterables):
+    for elms in zip(*gs):
         N += 1
         yield elms[0]
-    if iterables := [it[N:] for it in iterables if N < len(it)]:
-        yield from meld(*iterables)
+    if gs := [it[N:] for it in gs if N < len(it)]:
+        yield from meld(*gw)
+
+#
+# Sinks
+#
+
+def sink(iterable):
+    for _ in iterable:
+        pass
+
