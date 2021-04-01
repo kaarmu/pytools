@@ -21,6 +21,11 @@ def birth(N, population=[0,1]):
     for _ in range(N):
         yield choice(population)
 
+def randColors(N=1):
+    hexabet = '123456789ABCDEF'
+    for _ in range(N):
+        yield '#' + ''.join(birth(6, hexabet))
+
 def loop(iterable):
     while True:
         yield from iterable
