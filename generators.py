@@ -5,7 +5,6 @@ from time import sleep
 from math import cos, inf, pi
 from functools import reduce
 
-
 #
 # Sources
 #
@@ -155,7 +154,8 @@ def mux(*gs, func=None):
     """
     Fun Example
     -----------
-    >>> for ch in mux(inflist(), 'a'*20, 'b'*20, func=lambda els: els[1 + els[0] % 2]):
+    >>> for ch in mux(inflist(), 'a'*20, 'b'*20,
+    ...               func=lambda els: els[1 + els[0] % 2]):
     ...     print(ch)
     """
     func = func or truthy
@@ -164,6 +164,10 @@ def mux(*gs, func=None):
 #
 # Sinks
 #
+
+def sink(it):
+    for _ in it:
+        pass
 
 def truthy(it):
     """
@@ -175,9 +179,4 @@ def truthy(it):
         return el
     return it[0]
 
-
-
-def sink(it):
-    for _ in it:
-        pass
 
