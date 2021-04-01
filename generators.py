@@ -13,8 +13,8 @@ from functools import reduce
 def inflist(start=0, stop=inf, step=1):
     op = (lambda x, y: x < y) if step > 0 else (lambda x, y: x > y)
     while op(start, stop):
-        start += step
         yield start
+        start += step
 
 def birth(N, population=[0,1]):
     """ From a population, generate a sample randomly. """
@@ -29,17 +29,27 @@ def loop(iterable):
 # Modifiers
 #
 
-def sleepy(iterable, T=[0.5]):
+def sleepy(iterable, T=0.5):
     """
     Cause a generator to be sleepy.
 
     A very simple generator that yields values only after T seconds.
     """
-    for elm, t in zip(iterable, loop(T)):
-        sleep(t)
+    for elm in iterable:
+        sleep(T)
         yield elm
 
 def periodic(iterable, period=4):
+    """
+    Return a periodic value of the index.
+
+    Fun example
+    -----------
+    >>> for x, _ in periodic(inflist(), 128):
+    ...     sleep(0.25 * abs(x))
+    ...     print('x', end='', flush=True)
+
+    """
     for i, elm in enumerate(iterable):
         x = cos((i % period)*pi/period)
         yield x, elm
@@ -136,11 +146,33 @@ def meld(*gs):
     if gs := [it[N:] for it in gs if N < len(it)]:
         yield from meld(*gw)
 
+def mux(*gs, func=None):
+    """
+    Fun Example
+    -----------
+    >>> for ch in mux(inflist(), 'a'*20, 'b'*20, func=lambda els: els[1 + els[0] % 2]):
+    ...     print(ch)
+    """
+    func = func or truthy
+    yield from (func(els) for els in zip(*gs))
+
 #
 # Sinks
 #
 
-def sink(iterable):
-    for _ in iterable:
+def truthy(it):
+    """
+    Prioritizes first element which is truthy.
+    """
+    if it[0]:
+        return it[0]
+    if el := truthy(it[1:]):
+        return el
+    return it[0]
+
+
+
+def sink(it):
+    for _ in it:
         pass
 
