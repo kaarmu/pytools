@@ -25,25 +25,25 @@ def randColors(N=1):
     for _ in range(N):
         yield '#' + ''.join(birth(6, hexabet))
 
-def loop(iterable):
+def loop(it):
     while True:
-        yield from iterable
+        yield from it
 
 #
 # Modifiers
 #
 
-def sleepy(iterable, T=0.5):
+def sleepy(it, T=0.5):
     """
     Cause a generator to be sleepy.
 
     A very simple generator that yields values only after T seconds.
     """
-    for elm in iterable:
+    for el in it:
         sleep(T)
-        yield elm
+        yield el
 
-def periodic(iterable, period=4):
+def periodic(it, period=4):
     """
     Return a periodic value of the index.
 
@@ -54,24 +54,24 @@ def periodic(iterable, period=4):
     ...     print('x', end='', flush=True)
 
     """
-    for i, elm in enumerate(iterable):
+    for i, elm in enumerate(it):
         x = cos((i % period)*pi/period)
         yield x, elm
 
-def printer(iterable):
+def printer(it):
     """
     The simplest printer genereator ever.
     """
-    for elm in iterable:
+    for elm in it:
         print(elm)
         yield elm
 
 def warnLast(obj):
     """
-    Generate, for iterables, a warning if you are at the last element.
+    Generate, for its, a warning if you are at the last element.
 
     Much like enumerate, warnLast provides a second output. The second output
-    is true if iterable is on last element.
+    is true if it is on last element.
 
     Example
     -------
@@ -128,25 +128,25 @@ def purepipe(*gs):
 
 def meld(*gs):
     """
-    Meld iterables to a single iterable with left-most argument priority.
+    Meld its to a single it with left-most argument priority.
 
-    Similar to zip, meld modifies given iterables. The output is given by the
-    most prioritized iterable and when that is empty, continues onto the next.
-    The priority is increased the farther left the iterable is.
+    Similar to zip, meld modifies given its. The output is given by the
+    most prioritized it and when that is empty, continues onto the next.
+    The priority is increased the farther left the it is.
 
     Example
     -------
-        iterable 0: 'abcd'
-        iterable 1: 'efghi'
-        iterable 2: 'jkl'
-        iterable 3: 'mnopqrs'
+        it 0: 'abcd'
+        it 1: 'efghi'
+        it 2: 'jkl'
+        it 3: 'mnopqrs'
 
         output: 'abcdirs'
     """
     N = 0 # Max common length
-    for elms in zip(*gs):
+    for els in zip(*gs):
         N += 1
-        yield elms[0]
+        yield els[0]
     if gs := [it[N:] for it in gs if N < len(it)]:
         yield from meld(*gw)
 

@@ -13,7 +13,12 @@ from time import time
 
 
 def wait(t):
-    """Functionally the same as time.sleep, but more accurate."""
+    """
+    Wait until time has passed.
+
+    Functionally the same as time.sleep, but more accurate since it doesn't
+    rely on OS scheduler.
+    """
     started = time()
     while time() - started < t:
         continue
