@@ -20,6 +20,10 @@ def birth(N, population=[0,1]):
     for _ in range(N):
         yield choice(population)
 
+def randAlph(N=1):
+    alphabet = 'abcdefghjklmnopqrstuwvxyz'
+    yield from birth(N, alphabet)
+
 def randColors(N=1):
     hexabet = '123456789ABCDEF'
     for _ in range(N):
