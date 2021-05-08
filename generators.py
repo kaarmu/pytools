@@ -5,15 +5,15 @@ from time import sleep
 from math import cos, inf, pi
 from functools import reduce
 
+from itertools import *
+
 #
 # Sources
 #
 
-def inflist(start=0, stop=inf, step=1):
-    op = (lambda x, y: x < y) if step > 0 else (lambda x, y: x > y)
-    while op(start, stop):
-        yield start
-        start += step
+# itertools.count  ~ inflist
+# itertools.cycle
+# itertools.repeat ~ loop
 
 def birth(N, population=[0,1]):
     """ From a population, generate a sample randomly. """
@@ -29,13 +29,12 @@ def randColors(N=1):
     for _ in range(N):
         yield '#' + ''.join(birth(6, hexabet))
 
-def loop(it):
-    while True:
-        yield from it
-
 #
 # Modifiers
 #
+
+# itertools.accumulate
+# itertools.starmap
 
 def sleepy(it, T=0.5):
     """
@@ -99,6 +98,19 @@ def warnLast(obj):
 # Channels
 #
 
+# itertools.chain
+# itertools.compress
+# itertools.dropwhile
+# itertools.filterfalse
+# itertools.islice
+# itertools.takewhile
+# itertools.tee
+# itertools.zip_longest
+# itertools.product
+# itertools.permutations
+# itertools.combinations
+
+
 def pipe(*gs):
     """
     Take multiple (uninitialized) generators and pipe them together.
@@ -153,17 +165,6 @@ def meld(*gs):
         yield els[0]
     if gs := [it[N:] for it in gs if N < len(it)]:
         yield from meld(*gw)
-
-def mux(*gs, func=None):
-    """
-    Fun Example
-    -----------
-    >>> for ch in mux(inflist(), 'a'*20, 'b'*20,
-    ...               func=lambda els: els[1 + els[0] % 2]):
-    ...     print(ch)
-    """
-    func = func or truthy
-    yield from (func(els) for els in zip(*gs))
 
 #
 # Sinks
