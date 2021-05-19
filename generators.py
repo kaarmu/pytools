@@ -4,6 +4,7 @@ from random import choice
 from time import sleep
 from math import cos, inf, pi
 from functools import reduce
+from itertools import tee
 
 #
 # Sources
@@ -69,6 +70,33 @@ def printer(it):
     for elm in it:
         print(elm)
         yield elm
+
+def expand(it, n):
+    """
+    Expand the first n values.
+
+    Use this generator to, e.g. look ahead on the values to come.
+
+    Example
+    -------
+    >>> for i, j, none* in expand(range(4), 2):
+    ...     print(i,j)
+    0 1
+    1 2
+    2 3
+    >>> for i,j,k,*l in expand('abcdefg', 3):
+    ...     print(i,j,k,l)
+    a b c ['d', 'e', 'f', 'g']
+    b c d ['e', 'f', 'g']
+    c d e ['f', 'g']
+    d e f ['g']
+    e f g []
+
+
+    """
+    while len(expd := it[:n]) == n:
+        yield expd
+        it = it[1:]
 
 def warnLast(obj):
     """
