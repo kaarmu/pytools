@@ -193,7 +193,24 @@ def meld(*gs):
         yield els[0]
     if gs := [it[N:] for it in gs if N < len(it)]:
         yield from meld(*gw)
+        
+def gobble(sequence, indices):
+    """
+    Gobble up one segment at a time.
+    
+    Example
+    -------
+        original = '12345678'
+        take = [2, 3]
+        a, b = gobble(original, take)
+        a, b
+        ('12', '345')
+    """
+    for i in indices:
+        element, sequence = sequence[:i], sequence[i:]
+        yield element
 
+        
 #
 # Sinks
 #
